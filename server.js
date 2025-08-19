@@ -62,7 +62,7 @@ const app = express();
 
 // CACHE VERSION MANAGEMENT - Change this to deploy new version
 const CACHE_VERSION = process.env.CACHE_VERSION || 'v2';
-const APP_NAME = process.env.APP_NAME || 'faritany';
+const APP_NAME = process.env.APP_NAME || 'resaka';
 
 // Cache Lock Rescue - Intercept main.js to inject rescue code
 app.get('/main.js', (req, res) => {
