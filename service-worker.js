@@ -57,8 +57,8 @@
 
 // CONFIGURABLE PARAMETERS - Override with environment variables
 const CONFIG = {
-  CACHE_NAME: self.SW_CACHE_NAME || 'faritany-v2',
-  TEMP_CACHE_NAME: self.SW_TEMP_CACHE_NAME || 'faritany-temp-v2',
+  CACHE_NAME: self.SW_CACHE_NAME || 'resaka-v2',
+  TEMP_CACHE_NAME: self.SW_TEMP_CACHE_NAME || 'resaka-temp-v2',
   FIRST_TIME_TIMEOUT: parseInt(self.SW_FIRST_TIME_TIMEOUT) || 30000, // 30 seconds
   RETURNING_USER_TIMEOUT: parseInt(self.SW_RETURNING_USER_TIMEOUT) || 5000, // 5 seconds
   ENABLE_LOGS: self.SW_ENABLE_LOGS !== 'false' // true by default, false if set to 'false'
