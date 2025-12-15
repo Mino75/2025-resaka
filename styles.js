@@ -129,8 +129,25 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.copy-btn {
+  cursor: pointer;
+  margin-left: 8px;
+  opacity: 0.6;
+  user-select: none;
+  font-size: 1.1rem;
+}
+
+.copy-btn:hover {
+  opacity: 1;
+}
+
+.copy-btn:active {
+  transform: scale(0.95);
+}
+
 
 `;
   document.head.appendChild(style);
 }
+
 
