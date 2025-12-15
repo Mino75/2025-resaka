@@ -221,10 +221,32 @@ async function sendMessage() {
 }
 
 /* ===================== Init ===================== */
+
+async function autoLoadCachedModel() {
+  const models = webllm.prebuiltAppConfig.model_list;
+
+  for (const m of models) {
+    try {
+      const cached = await webllm.hasModelInCache(m.model_id);
+      if (cached) {
+        modelSelect.value = m.model_id;
+        await loadModel(); // your existing load function
+        return;
+      }
+    } catch {}
+  }
+
+  // No cached model → keep Send disabled
+  updateSendState();
+}
+
+
+
 (async function bootstrap() {
   populateContexts();
   await populateModels();
   await initEngine();
+  await autoLoadCachedModel();
   updateSendState();
 
   downloadBtn.onclick = loadModel;
