@@ -133,6 +133,26 @@ async function releaseScreenWakeLock() {
   wakeLock = null;
 }
 
+function addCopyButton(messageDiv) {
+  const copyBtn = document.createElement("span");
+  copyBtn.className = "copy-btn";
+  copyBtn.textContent = "📋";
+  copyBtn.title = "Copy to clipboard";
+
+  copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(messageDiv.textContent);
+      copyBtn.textContent = "✅";
+      setTimeout(() => (copyBtn.textContent = "📋"), 800);
+    } catch {
+      copyBtn.textContent = "❌";
+      setTimeout(() => (copyBtn.textContent = "📋"), 800);
+    }
+  };
+
+  messageDiv.appendChild(copyBtn);
+}
+
 
 /* ===================== Context UI ===================== */
 function populateContexts() {
@@ -227,10 +247,39 @@ async function sendMessage() {
   userInput.value = "";
   lengthWarning.textContent = "";
 
-  // Create placeholder assistant message
+  // Create assistant message container
   const assistantDiv = document.createElement("div");
   assistantDiv.className = "message assistant";
-  assistantDiv.textContent = "…";
+
+  // Streamed text (updated incrementally)
+  const textSpan = document.createElement("span");
+  assistantDiv.appendChild(textSpan);
+
+  // Metadata (filled once at the end)
+  const metaDiv = document.createElement("div");
+  metaDiv.className = "message-meta";
+  metaDiv.style.display = "none";
+  assistantDiv.appendChild(metaDiv);
+
+  // Copy button (exists from start, shown at end)
+  const copyBtn = document.createElement("span");
+  copyBtn.className = "copy-btn";
+  copyBtn.textContent = "📋";
+  copyBtn.title = "Copy to clipboard";
+  copyBtn.style.display = "none";
+
+  copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(textSpan.textContent);
+      copyBtn.textContent = "✅";
+      setTimeout(() => (copyBtn.textContent = "📋"), 800);
+    } catch {
+      copyBtn.textContent = "❌";
+      setTimeout(() => (copyBtn.textContent = "📋"), 800);
+    }
+  };
+
+  assistantDiv.appendChild(copyBtn);
   chatBox.appendChild(assistantDiv);
   assistantDiv.scrollIntoView({ behavior: "smooth", block: "end" });
 
@@ -258,7 +307,7 @@ async function sendMessage() {
       const delta = chunk.choices?.[0]?.delta?.content;
       if (delta) {
         accumulatedText += delta;
-        assistantDiv.textContent = accumulatedText;
+        textSpan.textContent = accumulatedText;
         assistantDiv.scrollIntoView({ behavior: "smooth", block: "end" });
       }
       if (chunk.usage) {
@@ -269,18 +318,23 @@ async function sendMessage() {
     const end = performance.now();
 
     if (usage) {
-      assistantDiv.textContent +=
-        `\n\n[model=${modelSelect.value}, latency=${(end - start).toFixed(0)}ms, ` +
+      metaDiv.textContent =
+        `[model=${modelSelect.value}, latency=${(end - start).toFixed(0)}ms, ` +
         `prompt_tokens=${usage.prompt_tokens}, completion_tokens=${usage.completion_tokens}]`;
+      metaDiv.style.display = "block";
     }
   } catch (err) {
-    assistantDiv.textContent =
+    textSpan.textContent =
       String(err).includes("token") || String(err).includes("context")
         ? "⚠️ Error: prompt too large for this model."
         : "⚠️ Error or refusal.";
   } finally {
     stopLoadingTimer();
     updateSendState();
+
+    if (textSpan.textContent.trim()) {
+      copyBtn.style.display = "inline";
+    }
   }
 }
 
@@ -326,5 +380,6 @@ async function autoLoadCachedModel() {
 
   sendBtn.onclick = sendMessage;
 })();
+
 
 
