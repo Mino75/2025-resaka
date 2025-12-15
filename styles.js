@@ -17,10 +17,11 @@ select, textarea, button {
 }
 
 .chat-container {
-  height: calc(100vh - 220px);
+  height: 100vh;
   overflow-y: auto;
   padding: 12px;
-  padding-bottom: 140px;
+  padding-bottom: 320px; /* deliberately large */
+  box-sizing: border-box;
 }
 
 .message {
@@ -149,5 +150,6 @@ button:disabled {
 `;
   document.head.appendChild(style);
 }
+
 
 
