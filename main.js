@@ -56,6 +56,12 @@ loadingEl.className = "loading";
 loadingEl.style.display = "none";
 sendBtn.after(loadingEl);
 
+/* Status indicator */
+const statusEl = document.createElement("span");
+statusEl.className = "status";
+statusEl.style.display = "none";
+sendBtn.after(statusEl);
+
 /* ===================== UI Helpers ===================== */
 function updateSendState() {
   const tooLong = userInput.value.length > STATE.maxPromptChars;
@@ -80,14 +86,14 @@ function addSeparator(text) {
   chatBox.appendChild(div);
 }
 
-function startLoadingTimer(label = "Loading") {
+function startLoadingTimer() {
   loadingStartTime = performance.now();
   loadingEl.style.display = "inline";
-  loadingEl.textContent = `${label}… 0.0s`;
+  loadingEl.textContent = "0.0s elapsed";
 
   loadingInterval = setInterval(() => {
     const elapsed = (performance.now() - loadingStartTime) / 1000;
-    loadingEl.textContent = `${label}… ${elapsed.toFixed(1)}s`;
+    loadingEl.textContent = `${elapsed.toFixed(1)}s elapsed`;
   }, 100);
 }
 
@@ -96,10 +102,14 @@ function stopLoadingTimer(finalLabel = "Done") {
     clearInterval(loadingInterval);
     loadingInterval = null;
   }
-  loadingEl.textContent = finalLabel;
+
+  statusEl.textContent = finalLabel;
+  loadingEl.textContent = "";
+
   setTimeout(() => {
+    statusEl.style.display = "none";
     loadingEl.style.display = "none";
-  }, 300);
+  }, 400);
 }
 
 async function requestScreenWakeLock() {
@@ -161,6 +171,12 @@ async function populateModels() {
 /* ===================== Engine ===================== */
 async function initEngine() {
   engine = new webllm.MLCEngine();
+
+    engine.setInitProgressCallback((report) => {
+    statusEl.style.display = "inline";
+    statusEl.textContent = report.text;
+  });
+  
 }
 
 async function loadModel() {
@@ -211,46 +227,63 @@ async function sendMessage() {
   userInput.value = "";
   lengthWarning.textContent = "";
 
+  // Create placeholder assistant message
+  const assistantDiv = document.createElement("div");
+  assistantDiv.className = "message assistant";
+  assistantDiv.textContent = "…";
+  chatBox.appendChild(assistantDiv);
+  assistantDiv.scrollIntoView({ behavior: "smooth", block: "end" });
+
   startLoadingTimer("Generating");
   sendBtn.disabled = true;
 
   try {
+    let accumulatedText = "";
+    let usage = null;
     const start = performance.now();
 
     const completion = await engine.chat.completions.create({
+      stream: true,
+      stream_options: { include_usage: true },
       messages: [
         {
           role: "system",
           content: buildSystemPrompt(selectedContext),
-
         },
         { role: "user", content: prompt },
       ],
     });
 
+    for await (const chunk of completion) {
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (delta) {
+        accumulatedText += delta;
+        assistantDiv.textContent = accumulatedText;
+        assistantDiv.scrollIntoView({ behavior: "smooth", block: "end" });
+      }
+      if (chunk.usage) {
+        usage = chunk.usage;
+      }
+    }
+
     const end = performance.now();
-    const text = completion.choices[0].message.content;
-    const usage = completion.usage;
 
-    addMessage(
-      "assistant",
-      `${text}
-
-[model=${modelSelect.value}, latency=${(end - start).toFixed(
-        0,
-      )}ms, prompt_tokens=${usage.prompt_tokens}, completion_tokens=${usage.completion_tokens}]`,
-    );
+    if (usage) {
+      assistantDiv.textContent +=
+        `\n\n[model=${modelSelect.value}, latency=${(end - start).toFixed(0)}ms, ` +
+        `prompt_tokens=${usage.prompt_tokens}, completion_tokens=${usage.completion_tokens}]`;
+    }
   } catch (err) {
-    const msg =
+    assistantDiv.textContent =
       String(err).includes("token") || String(err).includes("context")
         ? "⚠️ Error: prompt too large for this model."
         : "⚠️ Error or refusal.";
-    addMessage("assistant", msg);
   } finally {
     stopLoadingTimer();
     updateSendState();
   }
 }
+
 
 /* ===================== Init ===================== */
 
@@ -293,4 +326,5 @@ async function autoLoadCachedModel() {
 
   sendBtn.onclick = sendMessage;
 })();
+
 
