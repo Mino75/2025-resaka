@@ -103,6 +103,34 @@ button {
   opacity: 0.7;
   margin-left: 8px;
 }
+
+button {
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+button:hover:not(:disabled) {
+  background: #22222a;
+  border-color: #555;
+}
+
+button:active:not(:disabled) {
+  background: #2a2a33;
+  transform: translateY(1px);
+}
+
+button:focus-visible {
+  outline: 2px solid #4c9ffe;
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+
 `;
   document.head.appendChild(style);
 }
+
