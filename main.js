@@ -281,7 +281,7 @@ async function sendMessage() {
 
   assistantDiv.appendChild(copyBtn);
   chatBox.appendChild(assistantDiv);
-  assistantDiv.scrollIntoView({ behavior: "smooth", block: "end" });
+  assistantDiv.scrollIntoView({   behavior: "auto", block: "start"});
 
   startLoadingTimer("Generating");
   sendBtn.disabled = true;
@@ -308,7 +308,6 @@ async function sendMessage() {
       if (delta) {
         accumulatedText += delta;
         textSpan.textContent = accumulatedText;
-        assistantDiv.scrollIntoView({ behavior: "smooth", block: "end" });
       }
       if (chunk.usage) {
         usage = chunk.usage;
@@ -380,6 +379,7 @@ async function autoLoadCachedModel() {
 
   sendBtn.onclick = sendMessage;
 })();
+
 
 
 
