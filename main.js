@@ -35,6 +35,8 @@ let modelLoaded = false;
 let selectedContext = "encyclopedia";
 let loadingStartTime = 0;
 let loadingInterval = null;
+let wakeLock = null;
+
 /* ===================== DOM ===================== */
 const modelSelect = document.getElementById("model-select");
 const contextSelect = document.getElementById("context-select");
@@ -100,6 +102,27 @@ function stopLoadingTimer(finalLabel = "Done") {
   }, 300);
 }
 
+async function requestScreenWakeLock() {
+  if (!("wakeLock" in navigator)) return;
+
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+
+    wakeLock.addEventListener("release", () => {
+      wakeLock = null;
+    });
+  } catch {
+    // Permission denied or unsupported – fail silently
+  }
+}
+
+async function releaseScreenWakeLock() {
+  try {
+    await wakeLock?.release();
+  } catch {}
+  wakeLock = null;
+}
+
 
 /* ===================== Context UI ===================== */
 function populateContexts() {
@@ -143,17 +166,26 @@ async function initEngine() {
 async function loadModel() {
   modelLoaded = false;
   updateSendState();
+
+  await requestScreenWakeLock();
   startLoadingTimer("Loading model");
 
-  await engine.reload(modelSelect.value, {
-    temperature: STATE.temperature,
-    top_p: STATE.top_p,
-  });
+  try {
+    await engine.reload(modelSelect.value, {
+      temperature: STATE.temperature,
+      top_p: STATE.top_p,
+    });
 
-  modelLoaded = true;
-  await populateModels();
-  stopLoadingTimer("Model ready");
-  updateSendState();
+    modelLoaded = true;
+    await populateModels();
+    stopLoadingTimer("Model ready");
+  } catch (err) {
+    stopLoadingTimer("Load failed");
+    console.error("Model load error:", err);
+  } finally {
+    await releaseScreenWakeLock();
+    updateSendState();
+  }
 }
 
 /* ===================== Prompt Length Guard ===================== */
@@ -261,3 +293,4 @@ async function autoLoadCachedModel() {
 
   sendBtn.onclick = sendMessage;
 })();
+
