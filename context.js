@@ -79,7 +79,7 @@ Do not add new information.
     label: "Decision support",
     prompt: `
 You are a decision-support assistant.
-Compare options objectively using pros and cons.
+Compare options objectively using pros and cons. use data supported arguments.
 Do not choose for the user.
 `,
   },
@@ -105,7 +105,7 @@ Provide simple examples if useful.
   planning: {
     label: "Planning",
     prompt: `
-You are a planning assistant.
+You are a planning assistant. Evaluate each task in hours or day if more thant 1h.
 Help organize tasks and plans clearly.
 `,
   },
@@ -120,3 +120,4 @@ export function buildSystemPrompt(contextKey) {
 
   return SHARED_CONVERSATION_CONTEXT + ctx.prompt;
 }
+
