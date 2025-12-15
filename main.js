@@ -365,7 +365,7 @@ async function autoLoadCachedModel() {
   populateContexts();
   await populateModels();
   await initEngine();
-  await autoLoadCachedModel();
+  // await autoLoadCachedModel(); multiple loads breaks WebGPU - wait  for improvement of the WEBLLM
   updateSendState();
 
   downloadBtn.onclick = loadModel;
@@ -380,6 +380,7 @@ async function autoLoadCachedModel() {
 
   sendBtn.onclick = sendMessage;
 })();
+
 
 
 
