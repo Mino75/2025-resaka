@@ -81,7 +81,7 @@ const ASSETS = [
   '/main.js',
   '/styles.js',
   '/manifest.json',
-  '/contexts.js',
+  '/context.js',
   '/icon-512.png',
   '/icon-192.png',
   '/favicon.ico'
