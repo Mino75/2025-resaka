@@ -1,6 +1,6 @@
 # Resaka - Browser-Based LLM Chat
 
-A progressive web app that runs Large Language Models directly in your browser using WebLLM, with offline support and intelligent caching strategies.
+Resaka (Discussion in Malagasy) is a progressive web app that runs Large Language Models directly in your browser using WebLLM, with offline support and intelligent caching strategies.
 
 ## 🌟 Features
 
