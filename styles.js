@@ -160,8 +160,13 @@ button:disabled {
 
 .action-row {
   display: flex;
-  width: 100%;
+  width: calc(100% - 96px); /* 48px left + 48px right */
+  margin: 0 48px;
   gap: 8px;
+
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #18181d;
 }
 
 .action-row button {
