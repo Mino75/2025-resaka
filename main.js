@@ -406,11 +406,18 @@ async function sendMessage() {
       metaDiv.style.display = "block";
     }
   } catch (err) {
-    textSpan.textContent =
-      String(err).includes("token") || String(err).includes("context")
-        ? "⚠️ Error: prompt too large for this model."
-        : "⚠️ Error or refusal.";
-  } finally {
+  console.error("Generation error:", err);
+
+  const message =
+    err?.stack ||
+    err?.message ||
+    String(err);
+
+  textSpan.textContent =
+    /token|context/i.test(message)
+      ? "⚠️ Error: prompt too large for this model.\n\n" + message.slice(0, 800)
+      : "⚠️ Generation failed:\n\n" + message.slice(0, 1200);
+} finally {
     stopLoadingTimer();
     updateSendState();
 
