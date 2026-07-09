@@ -49,7 +49,9 @@ h1 {
   min-width: 0;
 }
 
-select, textarea, button {
+select,
+textarea,
+button {
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -156,6 +158,26 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.action-row {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+
+.action-row button {
+  margin: 0;
+  width: auto;
+}
+
+.action-row button:first-child,
+.action-row button:last-child {
+  flex: 0 0 56px;
+}
+
+.action-row button:nth-child(2) {
+  flex: 1;
+}
+
 .length-warning {
   font-size: 1.1rem;
   color: #ff6b6b;
@@ -174,10 +196,6 @@ button:disabled {
   opacity: 0.6;
   user-select: none;
   font-size: 1.1rem;
-}
-
-.input-bar button {
-  width: 100%;
 }
 
 .copy-btn:hover {
