@@ -62,6 +62,87 @@ statusEl.className = "status";
 statusEl.style.display = "none";
 sendBtn.after(statusEl);
 
+/* ===================== Voice + Keyboard ===================== */
+
+const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+let recognition = null;
+
+const voiceBtn = document.createElement("button");
+voiceBtn.textContent = "🎙️";
+voiceBtn.title = "Speak prompt";
+userInput.after(voiceBtn);
+
+const readBtn = document.createElement("button");
+readBtn.textContent = "🔊";
+readBtn.title = "Read last answer";
+sendBtn.after(readBtn);
+
+let lastAssistantAnswer = "";
+
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.interimResults = true;
+  recognition.continuous = false;
+
+  recognition.onresult = (event) => {
+    let text = "";
+
+    for (const result of event.results) {
+      text += result[0].transcript;
+    }
+
+    userInput.value = text;
+    updateSendState();
+  };
+
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+  };
+
+  voiceBtn.onclick = () => {
+    recognition.start();
+  };
+} else {
+  voiceBtn.disabled = true;
+  voiceBtn.title = "Speech recognition not supported";
+}
+
+function readText(text) {
+  if (!("speechSynthesis" in window)) return;
+
+  speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  utterance.rate = 1;
+  utterance.pitch = 1;
+
+  speechSynthesis.speak(utterance);
+}
+
+readBtn.onclick = () => {
+  if (lastAssistantAnswer.trim()) {
+    readText(lastAssistantAnswer);
+  }
+};
+
+userInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+
+    if (!sendBtn.disabled) {
+      sendMessage();
+    }
+  }
+});
+
+
+
+
+
 /* ===================== UI Helpers ===================== */
 function updateSendState() {
   const tooLong = userInput.value.length > STATE.maxPromptChars;
@@ -314,6 +395,8 @@ async function sendMessage() {
       }
     }
 
+    lastAssistantAnswer = accumulatedText;
+    
     const end = performance.now();
 
     if (usage) {
