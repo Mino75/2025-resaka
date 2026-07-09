@@ -84,6 +84,7 @@ const ASSETS = [
   '/context.js',
   '/icon-512.png',
   '/icon-192.png',
+  '/web-llm.js',
   '/favicon.ico'
 ];
 
