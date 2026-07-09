@@ -160,9 +160,10 @@ button:disabled {
 
 .action-row {
   display: flex;
-  width: calc(100% - 96px); /* 48px left + 48px right */
-  margin: 0 48px;
   gap: 8px;
+
+  margin-left: 60px;
+  margin-right: 60px;
 
   border: 1px solid #444;
   border-radius: 8px;
