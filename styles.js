@@ -1,15 +1,58 @@
 export function injectBaseStyles() {
   const style = document.createElement("style");
   style.textContent = `
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html, body {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
+  min-height: 100dvh;
+  overflow-x: hidden;
   background: #0e0e11;
   color: #e6e6eb;
   font-family: Arial, sans-serif;
   font-size: 1.1rem;
 }
 
+header,
+.controls,
+.chat-container,
+.input-bar {
+  width: 100%;
+  max-width: 100%;
+}
+
+header {
+  padding: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+}
+
+.controls select,
+.controls button {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
 select, textarea, button {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   background: #1a1a1f;
   color: #e6e6eb;
   border: 1px solid #333;
@@ -17,15 +60,16 @@ select, textarea, button {
 }
 
 .chat-container {
-  height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
   padding: 12px;
-  padding-bottom: 320px; /* deliberately large */
-  box-sizing: border-box;
+  padding-bottom: 190px;
 }
 
 .message {
-  max-width: 90%;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   padding: 12px;
   margin: 10px 0;
   border-radius: 10px;
@@ -54,6 +98,7 @@ select, textarea, button {
   bottom: 0;
   left: 0;
   right: 0;
+  max-width: 100vw;
   background: #0e0e11;
   z-index: 1000;
   display: flex;
@@ -66,46 +111,27 @@ select, textarea, button {
 
 #user-input {
   flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 48px;
-
   font-size: 1.1rem;
   line-height: 1.4;
-
   padding: 12px 14px;
   border-radius: 8px;
   border: 1px solid #444;
-
   background: #2a2a2a;
   color: #f0f0f0;
-
   outline: none;
 }
 
 textarea {
-  width: 100%;
   min-height: 120px;
-  font-size: 1.1rem;
   padding: 10px;
 }
 
 button {
-  font-size: 1.1rem;
   padding: 12px 18px;
-}
-
-.length-warning {
-  font-size: 1.1rem;
-  color: #ff6b6b;
-  margin-left: 4px;
-}
-
-.loading {
-  font-size: 1.1rem;
-  opacity: 0.7;
-  margin-left: 8px;
-}
-
-button {
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
 }
@@ -130,6 +156,18 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.length-warning {
+  font-size: 1.1rem;
+  color: #ff6b6b;
+  margin-left: 4px;
+}
+
+.loading {
+  font-size: 1.1rem;
+  opacity: 0.7;
+  margin-left: 8px;
+}
+
 .copy-btn {
   cursor: pointer;
   margin-left: 8px;
@@ -145,11 +183,6 @@ button:disabled {
 .copy-btn:active {
   transform: scale(0.95);
 }
-
-
 `;
   document.head.appendChild(style);
 }
-
-
-
