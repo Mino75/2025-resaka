@@ -1,41 +1,34 @@
 import * as webllm from "./web-llm.js";
 import { injectBaseStyles } from "./styles.js";
-import {
-  CONTEXTS,
-  buildSystemPrompt,
-} from "./context.js";
-
+import { CONTEXTS, buildSystemPrompt } from "./context.js";
 
 /* ===================== Styles ===================== */
 injectBaseStyles();
 
-/* ===================== SHARED CONVERSATION CONTEXT ===================== */
-const SHARED_CONVERSATION_CONTEXT = `
-Rules:
-- If the user request is outside the selected context, reply exactly:
-  "Refused: out of context."
-- Always include a certainty level at the end of the answer:
-  Certainty: high | medium | low
-- If unsure, prefer refusing rather than inventing.
-`;
-
-/* ===================== CONTEXTS ===================== */
-
- 
-/* ===================== STATE (ALL PARAMETERS) ===================== */
+/* ===================== STATE ===================== */
 const STATE = {
   temperature: 0.2,
   top_p: 0.9,
-  useHistory: false, // reserved for later
-  maxPromptChars: 2000, // STANDARD SAFE LIMIT
+  useHistory: false,
+  maxPromptChars: 2000,
+};
+
+const STORAGE_KEYS = {
+  selectedModelId: "resaka_selected_model_id",
+  loadedModelId: "resaka_loaded_model_id",
+  selectedContext: "resaka_selected_context",
 };
 
 let engine = null;
 let modelLoaded = false;
-let selectedContext = "encyclopedia";
+let loadedModelId = localStorage.getItem(STORAGE_KEYS.loadedModelId) || null;
+let selectedContext = localStorage.getItem(STORAGE_KEYS.selectedContext) || "general";
 let loadingStartTime = 0;
 let loadingInterval = null;
 let wakeLock = null;
+let isGenerating = false;
+let isLoadingModel = false;
+let lastAssistantAnswer = "";
 
 /* ===================== DOM ===================== */
 const modelSelect = document.getElementById("model-select");
@@ -44,6 +37,15 @@ const sendBtn = document.getElementById("send-btn");
 const userInput = document.getElementById("user-input");
 const chatBox = document.getElementById("chat-box");
 const downloadBtn = document.getElementById("download-model");
+
+let deleteModelBtn = document.getElementById("delete-model");
+
+if (!deleteModelBtn) {
+  deleteModelBtn = document.createElement("button");
+  deleteModelBtn.id = "delete-model";
+  deleteModelBtn.textContent = "Delete model";
+  downloadBtn.after(deleteModelBtn);
+}
 
 /* Prompt length indicator */
 const lengthWarning = document.createElement("span");
@@ -63,7 +65,6 @@ statusEl.style.display = "none";
 sendBtn.after(statusEl);
 
 /* ===================== Voice + Keyboard ===================== */
-
 const SpeechRecognition =
   window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -81,10 +82,7 @@ const actionRow = document.createElement("div");
 actionRow.className = "action-row";
 
 sendBtn.parentNode.insertBefore(actionRow, sendBtn);
-
 actionRow.append(voiceBtn, sendBtn, readBtn);
-
-let lastAssistantAnswer = "";
 
 if (SpeechRecognition) {
   recognition = new SpeechRecognition();
@@ -107,9 +105,7 @@ if (SpeechRecognition) {
     console.error("Speech recognition error:", event.error);
   };
 
-  voiceBtn.onclick = () => {
-    recognition.start();
-  };
+  voiceBtn.onclick = () => recognition.start();
 } else {
   voiceBtn.disabled = true;
   voiceBtn.title = "Speech recognition not supported";
@@ -144,18 +140,30 @@ userInput.addEventListener("keydown", (event) => {
   }
 });
 
-
-
-
-
 /* ===================== UI Helpers ===================== */
-function updateSendState() {
-  const tooLong = userInput.value.length > STATE.maxPromptChars;
-  sendBtn.disabled =
-    !engine || !modelLoaded || !selectedContext || tooLong;
+function setStatus(text, visible = true) {
+  statusEl.textContent = text;
+  statusEl.style.display = visible ? "inline" : "none";
 }
 
+function updateSendState() {
+  const tooLong = userInput.value.length > STATE.maxPromptChars;
+  const selectedModelId = modelSelect.value;
 
+  sendBtn.disabled =
+    !engine ||
+    !modelLoaded ||
+    !selectedContext ||
+    tooLong ||
+    isGenerating ||
+    isLoadingModel ||
+    selectedModelId !== loadedModelId;
+
+  downloadBtn.disabled = !engine || isGenerating || isLoadingModel;
+
+  deleteModelBtn.disabled =
+    !modelSelect.value || isGenerating || isLoadingModel;
+}
 
 function addMessage(role, content) {
   const div = document.createElement("div");
@@ -189,13 +197,13 @@ function stopLoadingTimer(finalLabel = "Done") {
     loadingInterval = null;
   }
 
-  statusEl.textContent = finalLabel;
+  setStatus(finalLabel, true);
   loadingEl.textContent = "";
 
   setTimeout(() => {
     statusEl.style.display = "none";
     loadingEl.style.display = "none";
-  }, 400);
+  }, 700);
 }
 
 async function requestScreenWakeLock() {
@@ -207,38 +215,16 @@ async function requestScreenWakeLock() {
     wakeLock.addEventListener("release", () => {
       wakeLock = null;
     });
-  } catch {
-    // Permission denied or unsupported – fail silently
-  }
+  } catch {}
 }
 
 async function releaseScreenWakeLock() {
   try {
     await wakeLock?.release();
   } catch {}
+
   wakeLock = null;
 }
-
-function addCopyButton(messageDiv) {
-  const copyBtn = document.createElement("span");
-  copyBtn.className = "copy-btn";
-  copyBtn.textContent = "📋";
-  copyBtn.title = "Copy to clipboard";
-
-  copyBtn.onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(messageDiv.textContent);
-      copyBtn.textContent = "✅";
-      setTimeout(() => (copyBtn.textContent = "📋"), 800);
-    } catch {
-      copyBtn.textContent = "❌";
-      setTimeout(() => (copyBtn.textContent = "📋"), 800);
-    }
-  };
-
-  messageDiv.appendChild(copyBtn);
-}
-
 
 /* ===================== Context UI ===================== */
 function populateContexts() {
@@ -251,9 +237,14 @@ function populateContexts() {
     contextSelect.appendChild(opt);
   });
 
-  contextSelect.value = "general";
-  selectedContext = "general";
+  if (CONTEXTS[selectedContext]) {
+    contextSelect.value = selectedContext;
+  } else {
+    contextSelect.value = "general";
+    selectedContext = "general";
+  }
 }
+
 /* ===================== Models ===================== */
 async function isModelDownloaded(modelId) {
   try {
@@ -264,7 +255,11 @@ async function isModelDownloaded(modelId) {
 }
 
 async function populateModels() {
+  const savedSelectedModelId =
+    localStorage.getItem(STORAGE_KEYS.selectedModelId) || modelSelect.value;
+
   modelSelect.innerHTML = "";
+
   for (const m of webllm.prebuiltAppConfig.model_list) {
     const cached = await isModelDownloaded(m.model_id);
     const opt = document.createElement("option");
@@ -272,82 +267,198 @@ async function populateModels() {
     opt.textContent = `${cached ? "✅" : "❌"} ${m.model_id}`;
     modelSelect.appendChild(opt);
   }
+
+  if (savedSelectedModelId) {
+    const exists = [...modelSelect.options].some(
+      (opt) => opt.value === savedSelectedModelId,
+    );
+
+    if (exists) {
+      modelSelect.value = savedSelectedModelId;
+    }
+  }
+}
+
+function rememberSelectedModel() {
+  if (modelSelect.value) {
+    localStorage.setItem(STORAGE_KEYS.selectedModelId, modelSelect.value);
+  }
+}
+
+function markModelLoaded(modelId) {
+  modelLoaded = true;
+  loadedModelId = modelId;
+  localStorage.setItem(STORAGE_KEYS.loadedModelId, modelId);
+}
+
+function markModelUnloaded() {
+  modelLoaded = false;
+  loadedModelId = null;
+  localStorage.removeItem(STORAGE_KEYS.loadedModelId);
 }
 
 /* ===================== Engine ===================== */
 async function initEngine() {
   engine = new webllm.MLCEngine();
 
-    engine.setInitProgressCallback((report) => {
-    statusEl.style.display = "inline";
-    statusEl.textContent = report.text;
+  engine.setInitProgressCallback((report) => {
+    setStatus(report.text, true);
   });
-  
 }
 
 async function loadModel() {
+  if (isGenerating || isLoadingModel) return;
+
+  const selectedModelId = modelSelect.value;
+  if (!selectedModelId) return;
+
+  isLoadingModel = true;
   modelLoaded = false;
+  rememberSelectedModel();
   updateSendState();
 
   await requestScreenWakeLock();
-  startLoadingTimer("Loading model");
+  startLoadingTimer();
 
   try {
-    await engine.reload(modelSelect.value, {
+    await engine.reload(selectedModelId, {
       temperature: STATE.temperature,
       top_p: STATE.top_p,
     });
 
-    modelLoaded = true;
+    markModelLoaded(selectedModelId);
+
     await populateModels();
+    modelSelect.value = selectedModelId;
+
     stopLoadingTimer("Model ready");
   } catch (err) {
+    markModelUnloaded();
     stopLoadingTimer("Load failed");
     console.error("Model load error:", err);
   } finally {
+    isLoadingModel = false;
     await releaseScreenWakeLock();
     updateSendState();
   }
 }
 
+async function checkCurrentModelState() {
+  const selectedModelId = modelSelect.value;
+  const savedLoadedModelId = localStorage.getItem(STORAGE_KEYS.loadedModelId);
+
+  rememberSelectedModel();
+
+  if (!engine || !selectedModelId || selectedModelId !== savedLoadedModelId) {
+    modelLoaded = false;
+    updateSendState();
+    return;
+  }
+
+  try {
+    setStatus("Checking model state…", true);
+
+    await engine.chat.completions.create({
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 1,
+    });
+
+    markModelLoaded(selectedModelId);
+    setStatus("Model ready", true);
+  } catch {
+    modelLoaded = false;
+    loadedModelId = savedLoadedModelId;
+    setStatus("Model needs reload", true);
+  } finally {
+    updateSendState();
+
+    setTimeout(() => {
+      statusEl.style.display = "none";
+    }, 700);
+  }
+}
+
+async function deleteSelectedModel() {
+  if (isGenerating || isLoadingModel) return 0;
+
+  const modelId = modelSelect.value;
+  if (!modelId) return 0;
+
+  if (modelId === loadedModelId) {
+    markModelUnloaded();
+
+    try {
+      await engine?.unload?.();
+    } catch {}
+  }
+
+  let deletedCount = 0;
+
+  if ("caches" in window) {
+    const cacheNames = await caches.keys();
+
+    for (const cacheName of cacheNames) {
+      const cache = await caches.open(cacheName);
+      const requests = await cache.keys();
+
+      for (const request of requests) {
+        if (request.url.includes(modelId)) {
+          await cache.delete(request);
+          deletedCount++;
+        }
+      }
+    }
+  }
+
+  await populateModels();
+  modelSelect.value = modelId;
+  updateSendState();
+
+  return deletedCount;
+}
+
 /* ===================== Prompt Length Guard ===================== */
 userInput.addEventListener("input", () => {
   const len = userInput.value.length;
+
   if (len > STATE.maxPromptChars) {
-    lengthWarning.textContent = `Text too long (${len} / ${STATE.maxPromptChars} characters)`;
+    lengthWarning.textContent =
+      `Text too long (${len} / ${STATE.maxPromptChars} characters)`;
   } else {
     lengthWarning.textContent = "";
   }
+
   updateSendState();
 });
 
 /* ===================== Chat ===================== */
 async function sendMessage() {
+  if (isGenerating) return;
   if (!engine || !modelLoaded) return;
+  if (modelSelect.value !== loadedModelId) return;
 
   const prompt = userInput.value.trim();
   if (!prompt) return;
 
-  addSeparator("— New conversation  —");
+  isGenerating = true;
+  sendBtn.disabled = true;
+
+  addSeparator("— New conversation —");
   addMessage("user", prompt);
   userInput.value = "";
   lengthWarning.textContent = "";
 
-  // Create assistant message container
   const assistantDiv = document.createElement("div");
   assistantDiv.className = "message assistant";
 
-  // Streamed text (updated incrementally)
   const textSpan = document.createElement("span");
   assistantDiv.appendChild(textSpan);
 
-  // Metadata (filled once at the end)
   const metaDiv = document.createElement("div");
   metaDiv.className = "message-meta";
   metaDiv.style.display = "none";
   assistantDiv.appendChild(metaDiv);
 
-  // Copy button (exists from start, shown at end)
   const copyBtn = document.createElement("span");
   copyBtn.className = "copy-btn";
   copyBtn.textContent = "📋";
@@ -367,10 +478,9 @@ async function sendMessage() {
 
   assistantDiv.appendChild(copyBtn);
   chatBox.appendChild(assistantDiv);
-  assistantDiv.scrollIntoView({   behavior: "auto", block: "start"});
+  assistantDiv.scrollIntoView({ behavior: "auto", block: "start" });
 
-  startLoadingTimer("Generating");
-  sendBtn.disabled = true;
+  startLoadingTimer();
 
   try {
     let accumulatedText = "";
@@ -385,44 +495,47 @@ async function sendMessage() {
           role: "system",
           content: buildSystemPrompt(selectedContext),
         },
-        { role: "user", content: prompt },
+        {
+          role: "user",
+          content: prompt,
+        },
       ],
     });
 
     for await (const chunk of completion) {
       const delta = chunk.choices?.[0]?.delta?.content;
+
       if (delta) {
         accumulatedText += delta;
         textSpan.textContent = accumulatedText;
       }
+
       if (chunk.usage) {
         usage = chunk.usage;
       }
     }
 
     lastAssistantAnswer = accumulatedText;
-    
+
     const end = performance.now();
 
     if (usage) {
       metaDiv.textContent =
-        `[model=${modelSelect.value}, latency=${(end - start).toFixed(0)}ms, ` +
+        `[model=${loadedModelId}, latency=${(end - start).toFixed(0)}ms, ` +
         `prompt_tokens=${usage.prompt_tokens}, completion_tokens=${usage.completion_tokens}]`;
       metaDiv.style.display = "block";
     }
   } catch (err) {
-  console.error("Generation error:", err);
+    console.error("Generation error:", err);
 
-  const message =
-    err?.stack ||
-    err?.message ||
-    String(err);
+    const message = err?.stack || err?.message || String(err);
 
-  textSpan.textContent =
-    /token|context/i.test(message)
-      ? "⚠️ Error: prompt too large for this model.\n\n" + message.slice(0, 800)
-      : "⚠️ Generation failed:\n\n" + message.slice(0, 1200);
-} finally {
+    textSpan.textContent =
+      /token|context/i.test(message)
+        ? "⚠️ Error: prompt too large for this model.\n\n" + message.slice(0, 800)
+        : "⚠️ Generation failed:\n\n" + message.slice(0, 1200);
+  } finally {
+    isGenerating = false;
     stopLoadingTimer();
     updateSendState();
 
@@ -432,51 +545,349 @@ async function sendMessage() {
   }
 }
 
+/* ===================== External Callable Functions ===================== */
+/**
+ * Functions callable by another iframe through window.postMessage.
+ *
+ * Message format:
+ * {
+ *   type: "resaka-action",
+ *   requestId?: string,
+ *   action: string,
+ *   payload?: object
+ * }
+ *
+ * Response format:
+ * {
+ *   type: "resaka-action-result",
+ *   requestId: string | null,
+ *   action: string,
+ *   result: object
+ * }
+ */
+const EXTERNAL_FUNCTIONS = {
+  /**
+   * Return the callable function list.
+   *
+   * Parameters:
+   *   none
+   *
+   * Returns:
+   *   functions: array of function metadata.
+   */
+  async describe() {
+    return {
+      ok: true,
+      functions: [
+        {
+          name: "describe",
+          description: "Return callable function metadata.",
+          parameters: {},
+        },
+        {
+          name: "fillPrompt",
+          description: "Fill the user prompt input without sending it.",
+          parameters: {
+            text: "string. Text to place in the prompt input.",
+          },
+        },
+        {
+          name: "send",
+          description: "Send the current prompt. Requires a loaded model and non-empty prompt.",
+          parameters: {},
+        },
+        {
+          name: "selectModel",
+          description: "Select a model by exact model id. Does not load it.",
+          parameters: {
+            modelId: "string. Exact WebLLM model id.",
+          },
+        },
+        {
+          name: "loadModel",
+          description: "Load the currently selected model. Downloads it if not cached.",
+          parameters: {},
+        },
+        {
+          name: "deleteModel",
+          description: "Delete cached files for the currently selected model.",
+          parameters: {},
+        },
+        {
+          name: "selectContext",
+          description: "Select a context by exact context id.",
+          parameters: {
+            contextId: "string. Exact context id from CONTEXTS.",
+          },
+        },
+        {
+          name: "listModels",
+          description: "Return available model ids and cache/load state.",
+          parameters: {},
+        },
+        {
+          name: "listContexts",
+          description: "Return available context ids.",
+          parameters: {},
+        },
+      ],
+    };
+  },
 
-/* ===================== Init ===================== */
+  /**
+   * Fill the prompt field.
+   *
+   * Parameters:
+   *   text (string): prompt text.
+   */
+  async fillPrompt({ text = "" } = {}) {
+    userInput.value = String(text);
+    userInput.dispatchEvent(new Event("input"));
+    updateSendState();
 
-async function autoLoadCachedModel() {
-  const models = webllm.prebuiltAppConfig.model_list;
+    return { ok: true, text: userInput.value };
+  },
 
-  for (const m of models) {
-    try {
-      const cached = await webllm.hasModelInCache(m.model_id);
-      if (cached) {
-        modelSelect.value = m.model_id;
-        await loadModel(); // your existing load function
-        return;
-      }
-    } catch {}
+  /**
+   * Send the current prompt.
+   *
+   * Parameters:
+   *   none
+   */
+  async send() {
+    if (sendBtn.disabled) {
+      return { ok: false, error: "send_disabled" };
+    }
+
+    await sendMessage();
+    return { ok: true };
+  },
+
+  /**
+   * Select a model.
+   *
+   * Parameters:
+   *   modelId (string): exact WebLLM model identifier.
+   */
+  async selectModel({ modelId = "" } = {}) {
+    const id = String(modelId);
+    const exists = [...modelSelect.options].some((opt) => opt.value === id);
+
+    if (!exists) {
+      return { ok: false, error: "model_not_found", modelId: id };
+    }
+
+    modelSelect.value = id;
+    rememberSelectedModel();
+    modelLoaded = id === loadedModelId;
+    updateSendState();
+
+    return {
+      ok: true,
+      modelId: id,
+      loaded: modelLoaded,
+    };
+  },
+
+  /**
+   * Load the currently selected model.
+   *
+   * Parameters:
+   *   none
+   */
+  async loadModel() {
+    await loadModel();
+
+    return {
+      ok: modelLoaded,
+      modelId: loadedModelId,
+      loaded: modelLoaded,
+    };
+  },
+
+  /**
+   * Delete the currently selected model from browser cache.
+   *
+   * Parameters:
+   *   none
+   */
+  async deleteModel() {
+    const deletedCount = await deleteSelectedModel();
+
+    return {
+      ok: true,
+      modelId: modelSelect.value,
+      deletedCount,
+    };
+  },
+
+  /**
+   * Select assistant context.
+   *
+   * Parameters:
+   *   contextId (string): exact context key from CONTEXTS.
+   */
+  async selectContext({ contextId = "" } = {}) {
+    const id = String(contextId);
+    const exists = [...contextSelect.options].some((opt) => opt.value === id);
+
+    if (!exists) {
+      return { ok: false, error: "context_not_found", contextId: id };
+    }
+
+    contextSelect.value = id;
+    selectedContext = id;
+    localStorage.setItem(STORAGE_KEYS.selectedContext, id);
+    updateSendState();
+
+    return {
+      ok: true,
+      contextId: id,
+    };
+  },
+
+  /**
+   * List available models.
+   *
+   * Parameters:
+   *   none
+   */
+  async listModels() {
+    const models = [];
+
+    for (const opt of modelSelect.options) {
+      models.push({
+        modelId: opt.value,
+        label: opt.textContent,
+        selected: opt.value === modelSelect.value,
+        loaded: opt.value === loadedModelId && modelLoaded,
+        cached: await isModelDownloaded(opt.value),
+      });
+    }
+
+    return { ok: true, models };
+  },
+
+  /**
+   * List available contexts.
+   *
+   * Parameters:
+   *   none
+   */
+  async listContexts() {
+    return {
+      ok: true,
+      contexts: Object.entries(CONTEXTS).map(([id, ctx]) => ({
+        contextId: id,
+        label: ctx.label,
+        selected: id === selectedContext,
+      })),
+    };
+  },
+};
+
+window.addEventListener("message", async (event) => {
+  const data = event.data || {};
+
+  if (data.type !== "resaka-action") return;
+
+  const action = data.action;
+  const payload = data.payload || {};
+  const fn = EXTERNAL_FUNCTIONS[action];
+
+  let result;
+
+  try {
+    if (!fn) {
+      result = { ok: false, error: "unknown_action", action };
+    } else {
+      result = await fn(payload);
+    }
+  } catch (err) {
+    result = {
+      ok: false,
+      error: "action_failed",
+      message: err?.message || String(err),
+    };
   }
 
-  // No cached model → keep Send disabled
-  updateSendState();
+  event.source?.postMessage(
+    {
+      type: "resaka-action-result",
+      requestId: data.requestId || null,
+      action,
+      result,
+    },
+    "*",
+  );
+});
+
+/* ===================== Init ===================== */
+async function restoreSelectionAndState() {
+  const savedSelectedModelId =
+    localStorage.getItem(STORAGE_KEYS.selectedModelId);
+
+  if (savedSelectedModelId) {
+    const exists = [...modelSelect.options].some(
+      (opt) => opt.value === savedSelectedModelId,
+    );
+
+    if (exists) {
+      modelSelect.value = savedSelectedModelId;
+    }
+  }
+
+  await checkCurrentModelState();
 }
 
+window.addEventListener("pageshow", () => {
+  checkCurrentModelState();
+});
 
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    checkCurrentModelState();
+  }
+});
 
 (async function bootstrap() {
   populateContexts();
   await populateModels();
   await initEngine();
-  // await autoLoadCachedModel(); multiple loads breaks WebGPU - wait  for improvement of the WEBLLM
-  updateSendState();
+  await restoreSelectionAndState();
 
   downloadBtn.onclick = loadModel;
 
+  deleteModelBtn.onclick = async () => {
+    const deletedCount = await deleteSelectedModel();
+
+    if (deletedCount > 0) {
+      setStatus("Model deleted");
+    } else {
+      setStatus("Nothing deleted");
+    }
+
+    updateSendState();
+  };
+
+  modelSelect.onchange = () => {
+    rememberSelectedModel();
+    modelLoaded = modelSelect.value === loadedModelId;
+    updateSendState();
+  };
+
   contextSelect.onchange = (e) => {
     selectedContext = e.target.value;
+    localStorage.setItem(STORAGE_KEYS.selectedContext, selectedContext);
+
     addSeparator(
       `— Context changed to: ${selectedContext.toUpperCase()} —`,
     );
+
     updateSendState();
   };
 
   sendBtn.onclick = sendMessage;
+
+  updateSendState();
 })();
-
-
-
-
-
-
