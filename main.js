@@ -72,12 +72,17 @@ let recognition = null;
 const voiceBtn = document.createElement("button");
 voiceBtn.textContent = "🎙️";
 voiceBtn.title = "Speak prompt";
-userInput.after(voiceBtn);
 
 const readBtn = document.createElement("button");
 readBtn.textContent = "🔊";
 readBtn.title = "Read last answer";
-sendBtn.after(readBtn);
+
+const actionRow = document.createElement("div");
+actionRow.className = "action-row";
+
+sendBtn.parentNode.insertBefore(actionRow, sendBtn);
+
+actionRow.append(voiceBtn, sendBtn, readBtn);
 
 let lastAssistantAnswer = "";
 
