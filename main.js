@@ -1,4 +1,4 @@
-import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+import * as webllm from "./web-llm.js";
 import { injectBaseStyles } from "./styles.js";
 import {
   CONTEXTS,
