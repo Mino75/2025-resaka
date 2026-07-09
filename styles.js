@@ -176,6 +176,10 @@ button:disabled {
   font-size: 1.1rem;
 }
 
+.input-bar button {
+  width: 100%;
+}
+
 .copy-btn:hover {
   opacity: 1;
 }
